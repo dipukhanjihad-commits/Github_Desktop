@@ -1,1 +1,13 @@
-PySide6
+# Runtime dependencies for Project Scaffolder.
+#
+# The desktop UI uses Qt (PySide6). The previous requirements.txt asked for
+# PySide6 while the code was Tkinter-only, which is why the app could not start.
+PySide6>=6.6
+
+# Optional but recommended: store GitHub tokens in the OS credential store.
+# Without it the app falls back to Windows DPAPI (or a 0600 file on POSIX).
+# keyring>=24
+
+# Development / testing
+# pytest>=8
+# pyflakes>=3

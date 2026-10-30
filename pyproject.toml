@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "project-scaffolder"
+version = "2.0.0"
+description = "Desktop project scaffolder with a git-backed version model"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Project Scaffolder contributors" }]
+keywords = ["git", "github", "scaffolding", "templates", "desktop"]
+classifiers = [
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+dependencies = [
+    "PySide6>=6.6",
+]
+
+[project.optional-dependencies]
+# Real OS credential storage; falls back to DPAPI / 0600 file without it.
+secure = ["keyring>=24"]
+dev = [
+    "pytest>=8",
+    "pyflakes>=3",
+]
+
+[project.scripts]
+scaffolder = "scaffolder_app.ui.app:run"
+
+[project.gui-scripts]
+project-scaffolder = "scaffolder_app.ui.app:run"
+
+[tool.setuptools]
+packages = ["scaffolder_app", "scaffolder_app.ui", "scaffolder_app.ui.dialogs",
+            "scaffolder_app.ui.panels"]
+
+[tool.setuptools.package-data]
+scaffolder_app = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.pyflakes]
+# pyflakes reads this only via the CLI's default discovery of *.py
+exclude = [".venv", "_legacy_backup"]

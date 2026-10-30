@@ -11,3 +11,15 @@ build
 .cache
 .DS_Store
 Thumbs.db
+
+# Python tooling
+*.egg-info
+.eggs
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Local artifacts
+screenshots/
+_legacy_backup/
