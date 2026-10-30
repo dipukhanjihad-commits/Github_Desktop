@@ -257,8 +257,20 @@ class Scaffolder:
             self.memory.add_version(name, "v1", parent=None, branch=base_branch)
 
             if create_repo and account:
-                self._create_and_push(name, account, visibility, log,
-                                      only_failures=True)
+                # The local project is complete here; a repository failure
+                # must not roll it back, so report it and leave the project in
+                # REPO_PENDING for a retry.
+                try:
+                    self.create_repository_for_project(
+                        name, account, visibility, progress=log)
+                except (TokenExpiredError, MissingTokenError):
+                    raise
+                except ScaffolderError as exc:
+                    self.memory.mark_repo_pending(name)
+                    self.memory.log_error("create_project:repo", redact(str(exc)))
+                    log(f"\u26a0 Repository creation failed: {exc}")
+                    log("The project was created locally. Use "
+                        "'Create repository' to retry.")
             else:
                 log("Project created locally (no GitHub repository).")
             return self.memory.get_project(name) or {}

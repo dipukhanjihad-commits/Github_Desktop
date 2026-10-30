@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from scaffolder_app.errors import (
-    AlreadyExistsError, RemoteUnsupportedError, ValidationError,
+    AlreadyExistsError, RemoteUnsupportedError, ScaffolderError, ValidationError,
 )
-from scaffolder_app.github_api import parse_remote, normalize_clone_url
+from scaffolder_app.github_api import normalize_clone_url, parse_remote
 from scaffolder_app.project_memory import RepoState
 
 from .conftest import make_template
@@ -35,6 +39,82 @@ def test_create_project_layout(service, memory, data_root):
     assert (root / "src" / "proj.py").exists()
     assert (root / ".git").exists()
     assert service.git("proj").current_branch() == "main"
+
+
+def test_create_project_with_account_survives_repo_failure(
+        service, memory, credentials, data_root):
+    """Creating a project with 'create repository' must not crash.
+
+    Regression: ``create_project`` called a non-existent
+    ``Scaffolder._create_and_push``, raising AttributeError on this path.
+    """
+    credentials.set("alice", "ghp_fake")
+    memory.add_account("alice")
+    template = make_template(data_root)
+    memory.add_template(name="basic", path=template, ignore=[".git"],
+                        placeholders={"module_name": ""})
+
+    def boom(*_args, **_kwargs):
+        raise ScaffolderError("network unavailable")
+
+    service.github.create_repo = boom  # type: ignore[assignment]
+
+    project = service.create_project(
+        "withrepo", "basic", data_root / "work" / "withrepo",
+        {"module_name": "withrepo", "project_name": "withrepo"},
+        account="alice", create_repo=True)
+
+    assert project["name"] == "withrepo"
+    assert project["repo_state"] == RepoState.REPO_PENDING.value
+    assert (data_root / "work" / "withrepo" / ".git").exists()
+    errors = memory.get_errors()
+    assert any(e["context"] == "create_project:repo" and
+               "network unavailable" in e["message"] for e in errors)
+
+
+def test_create_project_with_account_creates_repository(
+        service, memory, credentials, data_root, monkeypatch):
+    """The happy path reaches the real repository routine end to end."""
+    credentials.set("alice", "ghp_fake")
+    memory.add_account("alice")
+    template = make_template(data_root)
+    memory.add_template(name="basic", path=template, ignore=[".git"],
+                        placeholders={"module_name": ""})
+    calls: list[tuple] = []
+
+    def fake_create(account, owner, name, private, description=""):
+        calls.append((account, owner, name, private))
+        return {"owner": {"login": owner or account},
+                "html_url": f"https://github.com/{owner or account}/{name}",
+                "clone_url": f"https://github.com/{owner or account}/{name}.git"}
+
+    from scaffolder_app.git_ops import GitRunner
+
+    monkeypatch.setattr(service.github, "create_repo", fake_create)
+    monkeypatch.setattr(service.github, "repo_exists", lambda *a, **k: False)
+    monkeypatch.setattr(GitRunner, "push", lambda *a, **k: None)
+
+    project = service.create_project(
+        "happypath", "basic", data_root / "work" / "happypath",
+        {"module_name": "happypath", "project_name": "happypath"},
+        account="alice", create_repo=True)
+
+    assert calls == [("alice", "alice", "happypath", True)]
+    assert project["repo_url"] == "https://github.com/alice/happypath"
+    assert project["repo_state"] == RepoState.SYNCED.value
+
+
+def test_no_calls_to_undefined_self_methods():
+    """Static guard for calls to methods that do not exist.
+
+    pyflakes cannot see this class of bug and it crashed the New Project flow
+    at runtime, so the structural audit runs as part of the suite.
+    """
+    result = subprocess.run(
+        [sys.executable, "scripts/audit_calls.py"],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_create_project_rejects_non_empty_dest(service, memory, data_root):
