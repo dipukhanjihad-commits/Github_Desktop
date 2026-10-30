@@ -151,6 +151,67 @@ def test_empty_state_action_signal(ui):
     assert fired == [True]
 
 
+def test_toasts_can_be_stacked_repeatedly(ui):
+    """Regression: a deleted C++ Toast must never be touched again.
+
+    Reproduces ``RuntimeError: Internal C++ object (Toast) already deleted``
+    raised from ToastHost.show() when messages arrive in quick succession.
+    """
+    from PySide6.QtCore import QEvent
+    from PySide6.QtWidgets import QWidget
+
+    from scaffolder_app.ui.widgets import ToastHost
+
+    app, _ = ui
+    window = QWidget()
+    window.resize(900, 700)
+    window.show()
+    host = ToastHost(window, build_theme("light"))
+    try:
+        for index in range(12):
+            host.show(f"message {index}", "success")
+            app.processEvents()
+        assert len(host._toasts) > 0
+
+        # Force the dismiss -> deleteLater path, then interact again.
+        for weak in list(host._toasts):
+            toast = weak()
+            if toast is not None:
+                toast._dismiss()
+        for _ in range(5):
+            app.processEvents()
+            app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+        host.show("after cleanup", "warning")
+        host._layout()
+        app.processEvents()
+
+        host.clear()
+        app.processEvents()
+    finally:
+        window.close()
+        window.deleteLater()
+        app.processEvents()
+
+
+def test_theme_switch_keeps_toast_host(ui):
+    """Switching theme must not strand live toasts."""
+    from scaffolder_app.ui.main_window import MainWindow
+
+    app, services = ui
+    window = MainWindow(services)
+    try:
+        host_before = window.toast
+        window.toggle_theme()
+        app.processEvents()
+        assert window.toast is host_before
+        window.toast_ok("theme switched")
+        app.processEvents()
+    finally:
+        window.close()
+        app.processEvents()
+
+
 # ---------------------------------------------------------------------------
 # Async scopes (S18): a list load must not block an action.
 # ---------------------------------------------------------------------------

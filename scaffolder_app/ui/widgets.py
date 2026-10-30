@@ -7,6 +7,7 @@ text (M20/S16).
 
 from __future__ import annotations
 
+import weakref
 from typing import Callable
 
 from PySide6.QtCore import (
@@ -235,6 +236,8 @@ class LoadingState(QWidget):
 class Toast(QFrame):
     """Transient notification anchored to a parent widget."""
 
+    dismissed = Signal()
+
     def __init__(self, parent: QWidget, theme: Theme, message: str,
                  tone: str = "neutral", timeout: int = 3800) -> None:
         super().__init__(parent)
@@ -260,48 +263,110 @@ class Toast(QFrame):
         self._fade.setStartValue(0.0)
         self._fade.setEndValue(1.0)
         self._fade.start()
-        QTimer.singleShot(timeout, self._dismiss)
+        # Use a parented timer so it dies with the widget and never fires into
+        # a deleted C++ object.
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(max(600, timeout))
+        self._timer.timeout.connect(self._dismiss)
+        self._timer.start()
+        self._closing: QPropertyAnimation | None = None
 
     def _dismiss(self) -> None:
-        fade = QPropertyAnimation(self._effect, b"opacity", self)
-        fade.setDuration(220)
-        fade.setStartValue(1.0)
-        fade.setEndValue(0.0)
-        fade.finished.connect(self.deleteLater)
-        fade.start()
-        self._closing = fade
+        if self._closing is not None:
+            return
+        self._closing = QPropertyAnimation(self._effect, b"opacity", self)
+        self._closing.setDuration(220)
+        self._closing.setStartValue(self._effect.opacity())
+        self._closing.setEndValue(0.0)
+        self._closing.finished.connect(self._finish)
+        self._closing.start()
+
+    def _finish(self) -> None:
+        self.dismissed.emit()
+        self.hide()
+        self.deleteLater()
 
 
 class ToastHost:
-    """Stacks toasts in the bottom-right corner of a window."""
+    """Stacks toasts in the bottom-right corner of a window.
+
+    Holds weak references so a toast that Qt has already destroyed can never
+    be touched again (that caused a "Internal C++ object already deleted"
+    crash when several messages arrived in a row).
+    """
 
     def __init__(self, window: QWidget, theme: Theme) -> None:
         self.window = window
         self.theme = theme
-        self._toasts: list[Toast] = []
+        self._toasts: list = []
+        self._relayout = QTimer(window)
+        self._relayout.setSingleShot(True)
+        self._relayout.setInterval(60)
+        self._relayout.timeout.connect(self._layout)
+
+    def set_theme(self, theme: Theme) -> None:
+        self.theme = theme
+
+    # ------------------------------------------------------------------ api
 
     def show(self, message: str, tone: str = "neutral") -> None:
+        self._prune()
         toast = Toast(self.window, self.theme, message, tone)
-        toast.adjustSize()
-        self._toasts = [t for t in self._toasts if t.isVisible()]
+        toast.dismissed.connect(self._on_dismissed)
         self._toasts.append(toast)
-        self._layout()
+        toast.adjustSize()
         toast.show()
-        QTimer.singleShot(4000, self._layout)
+        self._layout()
+
+    def _prune(self) -> None:
+        """Drop entries whose C++ object is gone (or that are being destroyed)."""
+        alive = []
+        for weak in self._toasts:
+            toast = weak() if isinstance(weak, weakref.ref) else weak
+            if toast is None:
+                continue
+            try:
+                if not bool(toast.isVisible()) and not bool(toast.isHidden()):
+                    continue
+            except RuntimeError:
+                continue
+            alive.append(weakref.ref(toast))
+        self._toasts = alive
+
+    def _on_dismissed(self) -> None:
+        self._prune()
+        self._relayout.start()
+
+    def clear(self) -> None:
+        for weak in list(self._toasts):
+            toast = weak() if isinstance(weak, weakref.ref) else weak
+            try:
+                if toast is not None and toast._closing is None:
+                    toast._dismiss()
+            except RuntimeError:
+                continue
+        self._toasts.clear()
+
+    # -------------------------------------------------------------- layout
 
     def _layout(self) -> None:
         margin = 18
         offset = 0
-        for toast in reversed(self._toasts):
-            if not toast.isVisible() and not toast.isHidden():
-                pass
-            toast.adjustSize()
-            x = self.window.width() - toast.width() - margin
-            y = self.window.height() - toast.height() - margin - offset
-            toast.move(max(margin, x), max(margin, y))
-            toast.raise_()
-            offset += toast.height() + 8
-
+        self._prune()
+        for weak in reversed(self._toasts):
+            toast = weak()
+            if toast is None:
+                continue
+            try:
+                toast.adjustSize()
+                x = self.window.width() - toast.width() - margin
+                y = self.window.height() - toast.height() - margin - offset
+                toast.move(max(margin, x), max(margin, y))
+                toast.raise_()
+                offset += toast.height() + 8
+            except RuntimeError:
+                continue
 
 # ---------------------------------------------------------------------------
 # Cards, form builder, buttons

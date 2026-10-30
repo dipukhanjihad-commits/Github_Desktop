@@ -87,6 +87,7 @@ class MainWindow(QMainWindow):
         self._current_branch: str = ""
         self._change_count: int = 0
         self._pending_switch: tuple[str, str] | None = None
+        self._shutting_down = False
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self._auto_refresh)
 
@@ -380,10 +381,14 @@ class MainWindow(QMainWindow):
         self.status_label.setText(text)
 
     def toast_ok(self, text: str) -> None:
+        if self._shutting_down:
+            return
         self.toast.show(text, "success")
         self.set_status(text)
 
     def toast_warn(self, text: str) -> None:
+        if self._shutting_down:
+            return
         self.toast.show(text, "warning")
         self.set_status(text)
 
@@ -1850,7 +1855,9 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _rebuild_after_theme(self) -> None:
-        self.toast = ToastHost(self, self.theme)
+        # Reuse the host instead of replacing it: replacing it would strand
+        # any live toasts and their timers.
+        self.toast.set_theme(self.theme)
         self.workspace.theme = self.theme
         ui_platform.restyle_tree(self)
 
@@ -2038,13 +2045,19 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().resizeEvent(event)
-        if getattr(self, "_notes_timer", None) is not None:
-            self.toast._layout()
+        if not self._shutting_down:
+            self.toast._relayout.start()
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        self._shutting_down = True
         self._save_notes()
         self.state.capture_geometry(self)
         self.state.capture_splitter(self.splitter, "splitter")
         self.state.save()
+        # Stop notifications before widgets start being torn down.
+        try:
+            self.toast.clear()
+        except Exception:
+            pass
         self.runner.wait_for(3000)
         super().closeEvent(event)
