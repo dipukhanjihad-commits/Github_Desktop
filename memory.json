@@ -1,0 +1,96 @@
+{
+  "schema_version": 2,
+  "settings": {
+    "default_visibility": "private",
+    "default_owner": "alice",
+    "default_branch": "main",
+    "auto_create_repo": true,
+    "auto_push_after_commit": false,
+    "confirm_make_public": true,
+    "default_projects_path": "/home/alice/projects",
+    "default_ignore": [
+      ".git", ".venv", "venv", "__pycache__", "*.pyc", ".pytest_cache",
+      "node_modules", "dist", "build", ".next", ".cache", ".DS_Store", "Thumbs.db"
+    ],
+    "theme": "system"
+  },
+  "templates": {
+    "base-python": {
+      "name": "base-python",
+      "path": "/home/alice/templates/base-python",
+      "description": "Minimal Python project with venv + src layout",
+      "ignore": [".venv", "__pycache__", ".git", "*.pyc", ".pytest_cache"],
+      "placeholders": { "project_name": "", "author": "" },
+      "created_at": "2026-01-10T09:00:00+00:00",
+      "updated_at": "2026-01-10T09:00:00+00:00"
+    },
+    "react-vite": {
+      "name": "react-vite",
+      "path": "/home/alice/templates/react-vite",
+      "description": "Vite + React starter with ESLint and Prettier",
+      "ignore": ["node_modules", "dist", ".git", ".vite"],
+      "placeholders": { "project_name": "" },
+      "created_at": "2026-01-12T11:30:00+00:00",
+      "updated_at": "2026-01-12T11:30:00+00:00"
+    }
+  },
+  "projects": {
+    "hello-world": {
+      "name": "hello-world",
+      "path": "/home/alice/projects/hello-world",
+      "template": "base-python",
+      "imported": false,
+      "visibility": "private",
+      "owner": "alice",
+      "repo_url": "https://github.com/alice/hello-world",
+      "repo_state": "SYNCED",
+      "current_version": "v1",
+      "versions": {
+        "v1": {
+          "label": "v1", "branch": "main", "parent": null,
+          "created_at": "2026-01-15T10:00:00+00:00",
+          "sync_state": "SYNCED", "ahead": 0, "behind": 0
+        },
+        "v2": {
+          "label": "v2", "branch": "version/v2", "parent": "v1",
+          "created_at": "2026-01-20T14:45:00+00:00",
+          "sync_state": "AHEAD", "ahead": 2, "behind": 0
+        }
+      },
+      "notes": "Demo project",
+      "created_at": "2026-01-15T10:00:00+00:00",
+      "updated_at": "2026-01-20T14:45:00+00:00",
+      "last_refreshed_at": "2026-01-20T14:46:00+00:00"
+    },
+    "api-service": {
+      "name": "api-service",
+      "path": "/home/alice/projects/api-service",
+      "template": "base-python",
+      "imported": false,
+      "visibility": "private",
+      "owner": "alice",
+      "repo_url": null,
+      "repo_state": "REPO_PENDING",
+      "current_version": "v1",
+      "versions": {
+        "v1": {
+          "label": "v1", "branch": "main", "parent": null,
+          "created_at": "2026-02-10T16:20:00+00:00",
+          "sync_state": "UNKNOWN", "ahead": 0, "behind": 0
+        }
+      },
+      "notes": "",
+      "created_at": "2026-02-10T16:20:00+00:00",
+      "updated_at": "2026-02-10T16:22:00+00:00",
+      "last_refreshed_at": null
+    }
+  },
+  "accounts": {
+    "alice": {
+      "username": "alice",
+      "orgs": ["acme-org"],
+      "added_at": "2026-01-10T08:55:00+00:00"
+    }
+  },
+  "errors": []
+}
